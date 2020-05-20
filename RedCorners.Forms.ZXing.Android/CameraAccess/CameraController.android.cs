@@ -90,6 +90,12 @@ namespace ZXing.Mobile.CameraAccess
 				Camera.StartPreview();
 				
 				Camera.SetNonMarshalingPreviewCallback(cameraEventListener);
+
+				// Docs suggest if Auto or Macro modes, we should invoke AutoFocus at least once
+				var currentFocusMode = Camera.GetParameters().FocusMode;
+				if (currentFocusMode == Camera.Parameters.FocusModeAuto
+					|| currentFocusMode == Camera.Parameters.FocusModeMacro)
+					AutoFocus();
 			}
 			catch (Exception ex)
 			{
@@ -100,12 +106,6 @@ namespace ZXing.Mobile.CameraAccess
 			{
 				PerformanceCounter.Stop(perf, "Setup Camera Parameters took {0}ms");
 			}
-
-			// Docs suggest if Auto or Macro modes, we should invoke AutoFocus at least once
-			var currentFocusMode = Camera.GetParameters().FocusMode;
-			if (currentFocusMode == Camera.Parameters.FocusModeAuto
-				|| currentFocusMode == Camera.Parameters.FocusModeMacro)
-				AutoFocus();
 		}
 
 		public void AutoFocus()
@@ -227,90 +227,97 @@ namespace ZXing.Mobile.CameraAccess
 			// do nothing if something wrong with camera
 			if (Camera == null) return;
 
-			var parameters = Camera.GetParameters();
-			parameters.PreviewFormat = ImageFormatType.Nv21;
-
-			var supportedFocusModes = parameters.SupportedFocusModes;
-			if (scannerHost.ScanningOptions.DisableAutofocus)
-				parameters.FocusMode = Camera.Parameters.FocusModeFixed;
-			else if (Build.VERSION.SdkInt >= BuildVersionCodes.IceCreamSandwich &&
-				supportedFocusModes.Contains(Camera.Parameters.FocusModeContinuousPicture))
-				parameters.FocusMode = Camera.Parameters.FocusModeContinuousPicture;
-			else if (supportedFocusModes.Contains(Camera.Parameters.FocusModeContinuousVideo))
-				parameters.FocusMode = Camera.Parameters.FocusModeContinuousVideo;
-			else if (supportedFocusModes.Contains(Camera.Parameters.FocusModeAuto))
-				parameters.FocusMode = Camera.Parameters.FocusModeAuto;
-			else if (supportedFocusModes.Contains(Camera.Parameters.FocusModeFixed))
-				parameters.FocusMode = Camera.Parameters.FocusModeFixed;
-
-			var selectedFps = parameters.SupportedPreviewFpsRange.FirstOrDefault();
-			if (selectedFps != null)
+			try
 			{
-				// This will make sure we select a range with the lowest minimum FPS
-				// and maximum FPS which still has the lowest minimum
-				// This should help maximize performance / support for hardware
-				foreach (var fpsRange in parameters.SupportedPreviewFpsRange)
-				{
-					if (fpsRange[0] <= selectedFps[0] && fpsRange[1] > selectedFps[1])
-						selectedFps = fpsRange;
-				}
-				parameters.SetPreviewFpsRange(selectedFps[0], selectedFps[1]);
-			}
+				var parameters = Camera.GetParameters();
+				parameters.PreviewFormat = ImageFormatType.Nv21;
 
-			CameraResolution resolution = null;
-			var supportedPreviewSizes = parameters.SupportedPreviewSizes;
-			if (supportedPreviewSizes != null)
-			{
-				var availableResolutions = supportedPreviewSizes.Select(sps => new CameraResolution
-				{
-					Width = sps.Width,
-					Height = sps.Height
-				});
+				var supportedFocusModes = parameters.SupportedFocusModes;
+				if (scannerHost.ScanningOptions.DisableAutofocus)
+					parameters.FocusMode = Camera.Parameters.FocusModeFixed;
+				else if (Build.VERSION.SdkInt >= BuildVersionCodes.IceCreamSandwich &&
+					supportedFocusModes.Contains(Camera.Parameters.FocusModeContinuousPicture))
+					parameters.FocusMode = Camera.Parameters.FocusModeContinuousPicture;
+				else if (supportedFocusModes.Contains(Camera.Parameters.FocusModeContinuousVideo))
+					parameters.FocusMode = Camera.Parameters.FocusModeContinuousVideo;
+				else if (supportedFocusModes.Contains(Camera.Parameters.FocusModeAuto))
+					parameters.FocusMode = Camera.Parameters.FocusModeAuto;
+				else if (supportedFocusModes.Contains(Camera.Parameters.FocusModeFixed))
+					parameters.FocusMode = Camera.Parameters.FocusModeFixed;
 
-				// Try and get a desired resolution from the options selector
-				resolution = scannerHost.ScanningOptions.GetResolution(availableResolutions.ToList());
-
-				// If the user did not specify a resolution, let's try and find a suitable one
-				if (resolution == null)
+				var selectedFps = parameters.SupportedPreviewFpsRange.FirstOrDefault();
+				if (selectedFps != null)
 				{
-					foreach (var sps in supportedPreviewSizes)
+					// This will make sure we select a range with the lowest minimum FPS
+					// and maximum FPS which still has the lowest minimum
+					// This should help maximize performance / support for hardware
+					foreach (var fpsRange in parameters.SupportedPreviewFpsRange)
 					{
-						if (sps.Width >= 640 && sps.Width <= 1000 && sps.Height >= 360 && sps.Height <= 1000)
+						if (fpsRange[0] <= selectedFps[0] && fpsRange[1] > selectedFps[1])
+							selectedFps = fpsRange;
+					}
+					parameters.SetPreviewFpsRange(selectedFps[0], selectedFps[1]);
+				}
+
+				CameraResolution resolution = null;
+				var supportedPreviewSizes = parameters.SupportedPreviewSizes;
+				if (supportedPreviewSizes != null)
+				{
+					var availableResolutions = supportedPreviewSizes.Select(sps => new CameraResolution
+					{
+						Width = sps.Width,
+						Height = sps.Height
+					});
+
+					// Try and get a desired resolution from the options selector
+					resolution = scannerHost.ScanningOptions.GetResolution(availableResolutions.ToList());
+
+					// If the user did not specify a resolution, let's try and find a suitable one
+					if (resolution == null)
+					{
+						foreach (var sps in supportedPreviewSizes)
 						{
-							resolution = new CameraResolution
+							if (sps.Width >= 640 && sps.Width <= 1000 && sps.Height >= 360 && sps.Height <= 1000)
 							{
-								Width = sps.Width,
-								Height = sps.Height
-							};
-							break;
+								resolution = new CameraResolution
+								{
+									Width = sps.Width,
+									Height = sps.Height
+								};
+								break;
+							}
 						}
 					}
 				}
-			}
 
-			// Google Glass requires this fix to display the camera output correctly
-			if (Build.Model.Contains("Glass"))
-			{
-				resolution = new CameraResolution
+				// Google Glass requires this fix to display the camera output correctly
+				if (Build.Model.Contains("Glass"))
 				{
-					Width = 640,
-					Height = 360
-				};
-				// Glass requires 30fps
-				parameters.SetPreviewFpsRange(30000, 30000);
+					resolution = new CameraResolution
+					{
+						Width = 640,
+						Height = 360
+					};
+					// Glass requires 30fps
+					parameters.SetPreviewFpsRange(30000, 30000);
+				}
+
+				// Hopefully a resolution was selected at some point
+				if (resolution != null)
+				{
+					Android.Util.Log.Debug(MobileBarcodeScanner.TAG,
+						"Selected Resolution: " + resolution.Width + "x" + resolution.Height);
+					parameters.SetPreviewSize(resolution.Width, resolution.Height);
+				}
+
+				Camera.SetParameters(parameters);
+
+				SetCameraDisplayOrientation();
 			}
-
-			// Hopefully a resolution was selected at some point
-			if (resolution != null)
-			{
-				Android.Util.Log.Debug(MobileBarcodeScanner.TAG,
-					"Selected Resolution: " + resolution.Width + "x" + resolution.Height);
-				parameters.SetPreviewSize(resolution.Width, resolution.Height);
-			}
-
-			Camera.SetParameters(parameters);
-
-			SetCameraDisplayOrientation();
+			catch (Exception ex)
+            {
+				System.Console.WriteLine($"Camera ApplyCameraSettings failed with: {ex}");
+            }
 		}
 
 		void AutoFocus(int x, int y, bool useCoordinates)

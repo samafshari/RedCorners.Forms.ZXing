@@ -1,3 +1,10 @@
+# RedCorners.Forms.ZXing Changes
+
+This library is a modified version of ZXing.Net.Mobile, with two major differences:
+- It contains methods to take pictures, essentially making ZXingScannerView a proper Camera view,
+- It does not include the ZXing DLL, and instead references its NuGet package,
+- The structure of the project is different and only Android and iOS are supported.
+
 # ZXing.Net.Mobile
 
 [![Join the chat at https://gitter.im/Redth/ZXing.Net.Mobile](https://badges.gitter.im/Redth/ZXing.Net.Mobile.svg)](https://gitter.im/Redth/ZXing.Net.Mobile?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)

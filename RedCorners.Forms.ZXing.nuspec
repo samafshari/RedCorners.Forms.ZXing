@@ -2,7 +2,7 @@
 <package >
   <metadata>
     <id>RedCorners.Forms.ZXing</id>
-    <version>8.47.1-alpha</version>
+    <version>8.47.3</version>
     <title>RedCorners.Forms.ZXing</title>
     <authors>NeatCapital OÜ based on Redth/ZXing.Net.Mobile</authors>
     <owners>NeatCapital OÜ</owners>
